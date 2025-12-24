@@ -1,0 +1,85 @@
+# GitLab CI/CD configuration for AI Agent Testing
+
+stages:
+  - test
+  - report
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  MOCK_ENABLED: "true"
+
+cache:
+  paths:
+    - .cache/pip
+
+# Test template
+.test_template:
+  stage: test
+  image: python:$PYTHON_VERSION
+  before_script:
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+  script:
+    - praisonai-test run --report junit --output junit-$PYTHON_VERSION.xml
+    - praisonai-test run --report html --output report-$PYTHON_VERSION.html
+  artifacts:
+    when: always
+    reports:
+      junit: junit-$PYTHON_VERSION.xml
+    paths:
+      - junit-$PYTHON_VERSION.xml
+      - report-$PYTHON_VERSION.html
+    expire_in: 1 week
+
+# Run tests on multiple Python versions
+test:python3.8:
+  extends: .test_template
+  variables:
+    PYTHON_VERSION: "3.8"
+
+test:python3.9:
+  extends: .test_template
+  variables:
+    PYTHON_VERSION: "3.9"
+
+test:python3.10:
+  extends: .test_template
+  variables:
+    PYTHON_VERSION: "3.10"
+
+test:python3.11:
+  extends: .test_template
+  variables:
+    PYTHON_VERSION: "3.11"
+
+test:python3.12:
+  extends: .test_template
+  variables:
+    PYTHON_VERSION: "3.12"
+
+# Code quality checks
+lint:
+  stage: test
+  image: python:3.11
+  before_script:
+    - pip install black ruff mypy
+  script:
+    - black --check src/
+    - ruff check src/
+    - mypy src/
+  allow_failure: true
+
+# Aggregate reports
+pages:
+  stage: report
+  dependencies:
+    - test:python3.11
+  script:
+    - mkdir public
+    - cp report-3.11.html public/index.html
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+
