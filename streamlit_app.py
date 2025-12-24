@@ -33,9 +33,9 @@ from praisonai_test.assertions import (
 )
 
 # OpenAI API Configuration
-# Get API key from Streamlit secrets or environment variable
+# Get API key from session state (user input), Streamlit secrets, or environment variable
 import os
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+OPENAI_API_KEY = st.session_state.get('user_api_key', st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", "")))
 OPENAI_MODEL = "gpt-4o-mini"
 
 # Page configuration
@@ -113,24 +113,43 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ API Settings")
     
-    with st.expander("🔑 OpenAI API Key", expanded=False):
+    # Check if API key is configured
+    has_api_key = bool(OPENAI_API_KEY)
+    
+    if has_api_key:
+        st.success("✅ API Key: Configured")
+    else:
+        st.error("❌ API Key: Not Set")
+    
+    with st.expander("🔑 Configure OpenAI API Key", expanded=not has_api_key):
         st.markdown("**Current Model:** gpt-4o-mini")
+        st.markdown("**Status:** " + ("✅ Active" if has_api_key else "❌ Not configured"))
+        
         custom_key = st.text_input(
-            "Enter your API key (optional):",
+            "Enter your OpenAI API key:",
             value="",
             type="password",
-            help="Leave empty to use default. Get your key at: https://platform.openai.com/api-keys"
+            placeholder="sk-proj-...",
+            help="Get your key at: https://platform.openai.com/api-keys"
         )
+        
         if custom_key:
-            # Update the global API key
-            globals()['OPENAI_API_KEY'] = custom_key
-            st.success("✅ Custom API key set!")
+            # Update the global API key for this session
+            st.session_state['user_api_key'] = custom_key
+            st.success("✅ API key set for this session!")
+            st.info("🔄 Refresh the page to use the new key")
         
         st.markdown("---")
-        st.markdown("💡 **Need Credits?**")
-        st.markdown("1. Go to [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview)")
-        st.markdown("2. Add payment method")
-        st.markdown("3. Buy $5 credits = ~50,000 tests!")
+        st.markdown("💡 **How to Add API Key:**")
+        st.markdown("**Option 1: In Streamlit Cloud (Recommended)**")
+        st.markdown("1. Click 'Manage app' → Settings → Secrets")
+        st.markdown("2. Add: `OPENAI_API_KEY = \"your-key\"`")
+        st.markdown("")
+        st.markdown("**Option 2: Enter above (temporary)**")
+        st.markdown("Only works for current session")
+        st.markdown("")
+        st.markdown("💰 **Get Credits:** [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview)")
+        st.markdown("$5 = ~50,000 tests!")
     
     st.markdown("---")
     st.markdown("### 📊 Stats")
@@ -221,6 +240,19 @@ praisonai-test run --report html --output report.html""", language="bash")
 
 elif page == "Live Demo":
     st.markdown("## 🎬 Live Demo - Interactive Testing!")
+    
+    # Prominent API key notice
+    st.warning("""
+    ⚠️ **OpenAI API Key Required for Real ChatGPT Testing**
+    
+    To use REAL ChatGPT API (optional feature), you need to add your OpenAI API key:
+    
+    1. **On Streamlit Cloud:** Click "⚙️ API Settings" in the sidebar, then add your key
+    2. **Locally:** Create `.streamlit/secrets.toml` file with your key
+    3. **Get API Key:** https://platform.openai.com/api-keys
+    
+    💡 **No API key? No problem!** The framework works perfectly in **FREE Mock Mode** (no API key needed)
+    """)
     
     # Option to switch between mock and real
     use_real_api = st.checkbox("🤖 Use REAL ChatGPT API (requires credits)", value=False, 
