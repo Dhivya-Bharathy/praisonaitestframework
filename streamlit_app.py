@@ -10,6 +10,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 import traceback
+from openai import OpenAI
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -30,6 +31,12 @@ from praisonai_test.assertions import (
     assert_no_pii,
     assert_token_count,
 )
+
+# OpenAI API Configuration
+# Get API key from Streamlit secrets or environment variable
+import os
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+OPENAI_MODEL = "gpt-4o-mini"
 
 # Page configuration
 st.set_page_config(
@@ -104,6 +111,28 @@ with st.sidebar:
     st.markdown("- [Examples](https://github.com/MervinPraison/PraisonAI-Test/examples)")
     
     st.markdown("---")
+    st.markdown("### ⚙️ API Settings")
+    
+    with st.expander("🔑 OpenAI API Key", expanded=False):
+        st.markdown("**Current Model:** gpt-4o-mini")
+        custom_key = st.text_input(
+            "Enter your API key (optional):",
+            value="",
+            type="password",
+            help="Leave empty to use default. Get your key at: https://platform.openai.com/api-keys"
+        )
+        if custom_key:
+            # Update the global API key
+            globals()['OPENAI_API_KEY'] = custom_key
+            st.success("✅ Custom API key set!")
+        
+        st.markdown("---")
+        st.markdown("💡 **Need Credits?**")
+        st.markdown("1. Go to [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview)")
+        st.markdown("2. Add payment method")
+        st.markdown("3. Buy $5 credits = ~50,000 tests!")
+    
+    st.markdown("---")
     st.markdown("### 📊 Stats")
     st.metric("Version", "0.1.0")
     st.metric("Python", "3.8+")
@@ -126,8 +155,8 @@ if page == "Overview":
     with col2:
         st.markdown("""
         <div class="feature-card">
-            <h3>🎭 Smart Mocking</h3>
-            <p>Test without API calls. Save costs with intelligent LLM mocking</p>
+            <h3>🎭 Smart Testing</h3>
+            <p>FREE Mock mode by default. Optional REAL ChatGPT testing when needed!</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -147,7 +176,8 @@ if page == "Overview":
         st.markdown("""
         ### Core Capabilities
         - ✅ **Simple Test Syntax** - Decorator-based like pytest
-        - ✅ **LLM Mocking** - No API calls needed
+        - ✅ **FREE Mock Testing** - No API costs (default mode)
+        - ✅ **Optional Real AI** - Use ChatGPT when needed
         - ✅ **Rich Assertions** - AI-specific validations
         - ✅ **Performance Testing** - Latency & cost tracking
         - ✅ **Safety Validation** - PII & hallucination checks
@@ -190,47 +220,129 @@ praisonai-test run
 praisonai-test run --report html --output report.html""", language="bash")
 
 elif page == "Live Demo":
-    st.markdown("## 🎬 Live Demo - See It In Action!")
+    st.markdown("## 🎬 Live Demo - Interactive Testing!")
+    
+    # Option to switch between mock and real
+    use_real_api = st.checkbox("🤖 Use REAL ChatGPT API (requires credits)", value=False, 
+                                help="Check this to use real OpenAI API. Leave unchecked for free mock testing.")
+    
+    if use_real_api:
+        st.info("⚡ Using REAL ChatGPT (gpt-4o-mini) - costs ~$0.00001 per test")
+    else:
+        st.success("🎭 Using FREE Mock Mode - No API calls, instant results!")
     
     st.markdown("### Run Example Tests")
     
-    if st.button("▶️ Run Sample Tests", type="primary", use_container_width=True):
-        with st.spinner("Running tests..."):
-            # Create example test class
-            class DemoAgentTest(AgentTest):
-                """Demo test suite"""
-                
-                def setup(self):
-                    self.mock = MockLLM()
-                    self.mock.add_response(
-                        "What is 2+2?",
-                        mock_llm_response("The answer is 4", tokens_used=20, cost=0.001)
-                    )
-                    self.mock.add_response(
-                        "What is the capital of France?",
-                        mock_llm_response("The capital of France is Paris", tokens_used=30, cost=0.002)
-                    )
-                
-                @test_agent
-                def test_math_query(self):
-                    """Test simple math question"""
-                    result = self.mock.get_response("What is 2+2?")
-                    self.assert_contains(result.content, "4")
-                    self.assert_cost(result.cost, max_cost=0.01)
-                
-                @test_agent
-                def test_geography_query(self):
-                    """Test geography question"""
-                    result = self.mock.get_response("What is the capital of France?")
-                    self.assert_contains(result.content, "Paris", case_sensitive=False)
-                
-                @test_agent
-                def test_response_time(self):
-                    """Test response latency"""
-                    start = time.time()
-                    result = self.mock.get_response("What is 2+2?")
-                    duration = time.time() - start
-                    self.assert_latency(duration, max_seconds=1.0)
+    button_text = "▶️ Run Sample Tests" + (" with REAL ChatGPT 🤖" if use_real_api else " (Mock Mode) 🎭")
+    
+    if st.button(button_text, type="primary", use_container_width=True):
+        spinner_text = "🤖 Calling Real ChatGPT API..." if use_real_api else "⚡ Running tests with mock responses..."
+        
+        with st.spinner(spinner_text):
+            if use_real_api:
+                # Create example test class with REAL OpenAI
+                class DemoAgentTest(AgentTest):
+                    """Demo test suite with REAL ChatGPT"""
+                    
+                    def setup(self):
+                        # Use REAL OpenAI API
+                        self.client = OpenAI(api_key=OPENAI_API_KEY)
+                        self.responses = []
+                    
+                    def get_real_response(self, prompt):
+                        """Get REAL response from ChatGPT"""
+                        start = time.time()
+                        try:
+                            response = self.client.chat.completions.create(
+                                model=OPENAI_MODEL,
+                                messages=[{"role": "user", "content": prompt}],
+                                max_tokens=100
+                            )
+                        except Exception as e:
+                            if "insufficient_quota" in str(e):
+                                raise Exception("❌ No OpenAI credits! Add credits at: https://platform.openai.com/settings/organization/billing/overview")
+                            raise
+                        duration = time.time() - start
+                        
+                        result = type('Response', (), {
+                            'content': response.choices[0].message.content,
+                            'tokens_used': response.usage.total_tokens,
+                            'cost': response.usage.total_tokens * 0.00000015,  # gpt-4o-mini cost
+                            'latency': duration,
+                            'model': OPENAI_MODEL,
+                        })()
+                        
+                        self.responses.append({
+                            'prompt': prompt,
+                            'response': result.content,
+                            'tokens': result.tokens_used,
+                            'cost': result.cost
+                        })
+                        
+                        return result
+                    
+                    @test_agent
+                    def test_math_query(self):
+                        """Test simple math question with REAL ChatGPT"""
+                        result = self.get_real_response("What is 2+2? Answer briefly.")
+                        self.assert_contains(result.content, "4")
+                        st.info(f"💬 ChatGPT: {result.content}")
+                    
+                    @test_agent
+                    def test_geography_query(self):
+                        """Test geography question with REAL ChatGPT"""
+                        result = self.get_real_response("What is the capital of France? Answer in one word.")
+                        self.assert_contains(result.content, "Paris", case_sensitive=False)
+                        st.info(f"💬 ChatGPT: {result.content}")
+                    
+                    @test_agent
+                    def test_response_time(self):
+                        """Test response latency with REAL ChatGPT"""
+                        start = time.time()
+                        result = self.get_real_response("Say hello in 3 words.")
+                        duration = time.time() - start
+                        self.assert_latency(duration, max_seconds=10.0)  # More time for real API
+                        st.info(f"💬 ChatGPT: {result.content}")
+            else:
+                # Create example test class with MOCK (Free)
+                class DemoAgentTest(AgentTest):
+                    """Demo test suite with Mock LLM"""
+                    
+                    def setup(self):
+                        self.mock = MockLLM()
+                        self.mock.add_response(
+                            "What is 2+2?",
+                            mock_llm_response("The answer is 4", tokens_used=20, cost=0.001)
+                        )
+                        self.mock.add_response(
+                            "What is the capital of France?",
+                            mock_llm_response("The capital of France is Paris", tokens_used=30, cost=0.002)
+                        )
+                        self.mock.add_response(
+                            "Say hello",
+                            mock_llm_response("Hello! How can I help you today?", tokens_used=25, cost=0.0015)
+                        )
+                    
+                    @test_agent
+                    def test_math_query(self):
+                        """Test simple math question"""
+                        result = self.mock.get_response("What is 2+2?")
+                        self.assert_contains(result.content, "4")
+                        self.assert_cost(result.cost, max_cost=0.01)
+                    
+                    @test_agent
+                    def test_geography_query(self):
+                        """Test geography question"""
+                        result = self.mock.get_response("What is the capital of France?")
+                        self.assert_contains(result.content, "Paris", case_sensitive=False)
+                    
+                    @test_agent
+                    def test_response_time(self):
+                        """Test response latency"""
+                        start = time.time()
+                        result = self.mock.get_response("Say hello")
+                        duration = time.time() - start
+                        self.assert_latency(duration, max_seconds=1.0)
             
             # Run tests
             test_instance = DemoAgentTest()
@@ -286,17 +398,49 @@ elif page == "Live Demo":
                         st.error(f"**Error:** {result.error}")
                         st.markdown(f"**Duration:** {result.duration:.2f}s")
             
-            # Show mock call history
-            st.markdown("### 📞 Mock LLM Call History")
-            call_data = []
-            for i, call in enumerate(test_instance.mock.call_history):
-                call_data.append({
-                    "Call #": i + 1,
-                    "Prompt": call["prompt"][:50] + "..." if len(call["prompt"]) > 50 else call["prompt"],
-                })
-            
-            if call_data:
-                st.dataframe(call_data, use_container_width=True)
+            # Show call history
+            if use_real_api:
+                st.markdown("### 📞 Real ChatGPT API Call History")
+                call_data = []
+                total_cost = 0
+                total_tokens = 0
+                
+                for i, call in enumerate(test_instance.responses):
+                    call_data.append({
+                        "Call #": i + 1,
+                        "Prompt": call["prompt"][:40] + "..." if len(call["prompt"]) > 40 else call["prompt"],
+                        "Response": call["response"][:50] + "..." if len(call["response"]) > 50 else call["response"],
+                        "Tokens": call["tokens"],
+                        "Cost": f"${call['cost']:.6f}"
+                    })
+                    total_cost += call['cost']
+                    total_tokens += call['tokens']
+                
+                if call_data:
+                    st.dataframe(call_data, use_container_width=True)
+                    
+                    # Show totals
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total API Calls", len(call_data))
+                    with col2:
+                        st.metric("Total Tokens", total_tokens)
+                    with col3:
+                        st.metric("Total Cost", f"${total_cost:.6f}")
+                    
+                    st.info(f"🤖 Model: {OPENAI_MODEL} | ⚡ REAL ChatGPT responses!")
+            else:
+                st.markdown("### 📞 Mock LLM Call History")
+                call_data = []
+                for i, call in enumerate(test_instance.mock.call_history):
+                    call_data.append({
+                        "Call #": i + 1,
+                        "Prompt": call["prompt"][:50] + "..." if len(call["prompt"]) > 50 else call["prompt"],
+                    })
+                
+                if call_data:
+                    st.dataframe(call_data, use_container_width=True)
+                    st.success("🎭 FREE Mock Mode - No API costs!")
             
             st.balloons()
 
@@ -602,7 +746,8 @@ class TestDataExtractor(AgentTest):
     
     with col2:
         expected_response = st.text_area("Expected in Response", selected_template["expected"], height=100)
-        use_mock = st.checkbox("Use Mock LLM (recommended)", value=selected_template["use_mock"])
+        use_mock = st.checkbox("Use Mock LLM (Free - No API needed)", value=True, 
+                               help="Mock = Free fake responses. Uncheck to use REAL ChatGPT (requires credits)")
     
     st.markdown("### 🎯 Additional Assertions")
     
@@ -640,6 +785,8 @@ class TestDataExtractor(AgentTest):
         imports = ["from praisonai_test import AgentTest, test_agent"]
         if use_mock:
             imports.append("from praisonai_test import MockLLM, mock_llm_response")
+        else:
+            imports.append("from openai import OpenAI")
         if check_tokens:
             imports.append("from praisonai_test.assertions import assert_token_count")
         if check_pii:
@@ -657,7 +804,10 @@ class TestDataExtractor(AgentTest):
             mock_llm_response("{mock_response}", tokens_used=50, cost=0.005)
         )\n'''
         else:
-            setup_code += '        # Initialize your agent here\n        # self.agent = MyAgent()\n        pass\n'
+            setup_code += f'''        # Use REAL ChatGPT API
+        self.client = OpenAI(api_key="{OPENAI_API_KEY}")
+        self.model = "{OPENAI_MODEL}"
+        self.responses = []\n'''
         
         # Build test method
         test_method = f'''    @test_agent
@@ -665,36 +815,76 @@ class TestDataExtractor(AgentTest):
         """{method_doc}"""
 '''
         
-        if check_latency:
-            test_method += '        import time\n        start = time.time()\n        '
+        if not use_mock:
+            # Add helper method for real API calls
+            test_method += f'''        # Get REAL ChatGPT response
+        start = time.time()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{{"role": "user", "content": "{prompt}"}}],
+            max_tokens=150
+        )
+        result_content = response.choices[0].message.content
+        duration = time.time() - start
+        tokens = response.usage.total_tokens
+        cost = tokens * 0.00000015  # gpt-4o-mini cost
+        
+        # Store response info
+        self.responses.append({{
+            'content': result_content,
+            'tokens': tokens,
+            'cost': cost,
+            'latency': duration
+        }})
+        
+        # Assertions
+        self.assert_contains(result_content, "{expected_response}")
+'''
         else:
-            test_method += '        '
+            if check_latency:
+                test_method += '        import time\n        start = time.time()\n        '
+            else:
+                test_method += '        '
+            
+            test_method += f'result = self.mock.get_response("{prompt}")\n'
+            
+            if check_latency:
+                test_method += '        duration = time.time() - start\n'
+            
+            test_method += '\n        # Assertions\n'
+            test_method += f'        self.assert_contains(result.content, "{expected_response}")\n'
         
         if use_mock:
-            test_method += f'result = self.mock.get_response("{prompt}")\n'
+            if check_json:
+                test_method += f'        self.assert_json_valid(result.content)\n'
+            
+            if check_latency:
+                test_method += f'        self.assert_latency(result.latency, max_seconds={max_latency})\n'
+            
+            if check_cost:
+                test_method += f'        self.assert_cost(result.cost, max_cost={max_cost})\n'
+            
+            if check_tokens:
+                test_method += f'        assert_token_count(result.tokens_used, max_tokens={max_tokens})\n'
+            
+            if check_pii:
+                test_method += f'        assert_no_pii(result.content)\n'
         else:
-            test_method += f'result = self.agent.run("{prompt}")  # Replace with your agent call\n'
-        
-        if check_latency:
-            test_method += '        duration = time.time() - start\n'
-        
-        test_method += '\n        # Assertions\n'
-        test_method += f'        self.assert_contains(result{"" if not use_mock else ".content"}, "{expected_response}")\n'
-        
-        if check_json:
-            test_method += f'        self.assert_json_valid(result{"" if not use_mock else ".content"})\n'
-        
-        if check_latency:
-            test_method += f'        self.assert_latency({"duration" if not use_mock else "result.latency"}, max_seconds={max_latency})\n'
-        
-        if check_cost:
-            test_method += f'        self.assert_cost({"0.01" if not use_mock else "result.cost"}, max_cost={max_cost})\n'
-        
-        if check_tokens:
-            test_method += f'        assert_token_count({"100" if not use_mock else "result.tokens_used"}, max_tokens={max_tokens})\n'
-        
-        if check_pii:
-            test_method += f'        assert_no_pii(result{"" if not use_mock else ".content"})\n'
+            # Real API assertions
+            if check_json:
+                test_method += f'        self.assert_json_valid(result_content)\n'
+            
+            if check_latency:
+                test_method += f'        self.assert_latency(duration, max_seconds={max_latency})\n'
+            
+            if check_cost:
+                test_method += f'        self.assert_cost(cost, max_cost={max_cost})\n'
+            
+            if check_tokens:
+                test_method += f'        assert_token_count(tokens, max_tokens={max_tokens})\n'
+            
+            if check_pii:
+                test_method += f'        assert_no_pii(result_content)\n'
         
         # Build complete test code
         test_code = f'''"""
@@ -752,6 +942,8 @@ if __name__ == "__main__":
         features = []
         if use_mock:
             features.append("🎭 Uses Mock LLM (no API costs)")
+        else:
+            features.append(f"🤖 Uses REAL ChatGPT ({OPENAI_MODEL})")
         if check_latency:
             features.append(f"⏱️ Latency check (< {max_latency}s)")
         if check_cost:
@@ -807,6 +999,7 @@ if __name__ == "__main__":
                         'test_agent': test_agent,
                         'MockLLM': MockLLM,
                         'mock_llm_response': mock_llm_response,
+                        'OpenAI': OpenAI,
                         'assert_token_count': assert_token_count if check_tokens else None,
                         'assert_no_pii': assert_no_pii if check_pii else None,
                         'time': time,
@@ -835,6 +1028,22 @@ if __name__ == "__main__":
                             st.metric("Duration", f"{result.duration:.3f}s")
                         with col3:
                             st.metric("Test", method_name)
+                        
+                        # Show real API response if not using mock
+                        if not use_mock and hasattr(test_instance, 'responses') and test_instance.responses:
+                            st.markdown("---")
+                            st.markdown("### 🤖 Real ChatGPT Response")
+                            for i, resp in enumerate(test_instance.responses):
+                                with st.expander(f"💬 Response #{i+1}", expanded=True):
+                                    st.markdown(f"**Content:** {resp['content']}")
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Tokens", resp['tokens'])
+                                    with col2:
+                                        st.metric("Cost", f"${resp['cost']:.6f}")
+                                    with col3:
+                                        st.metric("Latency", f"{resp['latency']:.2f}s")
+                            st.info(f"🤖 Model: {OPENAI_MODEL} | ⚡ REAL ChatGPT response!")
                         
                         st.balloons()
                     else:

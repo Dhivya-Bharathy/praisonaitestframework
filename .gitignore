@@ -93,4 +93,4 @@ my-agent-tests/
 .cursor/rules/byterover-rules.mdc
 .kiro/steering/byterover-rules.md
 .qoder/rules/byterover-rules.md
-.augment/rules/byterover-rules.md
+.augment/rules/byterover-rules.md.streamlit/secrets.toml
